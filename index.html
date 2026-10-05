@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14124a">
+<title>Auction Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Archivo:wght@500;700;800;900&display=swap">
+<style>
+/* Layout: one phone-width column under a sticky scoreboard; every screen is a "stage" card lit by a spotlight. Deliberately single dark theme (game-show stage). */
+:root{
+  --stage:#14124a;      /* deep indigo stage */
+  --stage-2:#211d6b;    /* raised panel */
+  --stage-3:#2d2888;    /* control fill */
+  --line:#4a44b8;       /* hairlines */
+  --ink:#fff7e6;        /* warm white text */
+  --muted:#b4afe6;      /* secondary text */
+  --gold:#ffc72c;       /* marquee bulbs, money */
+  --p1:#ff4f9a;         /* player 1 paddle */
+  --p2:#2fd9ee;         /* player 2 paddle */
+  --bad:#ff6b5a;        /* errors */
+  --good:#7ef0a0;       /* high scores */
+  --display:"Bungee","Impact","Arial Black",system-ui,sans-serif;
+  --body:"Archivo","Helvetica Neue",Arial,system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  margin:0;background:var(--stage);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.4;
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% -5%, rgba(255,199,44,.20), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 2px, transparent 2px 46px);
+  background-attachment:fixed;
+  -webkit-tap-highlight-color:transparent;
+}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+#app{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:0 40px;min-height:100vh;display:flex;flex-direction:column}
+.screen{display:flex;flex-direction:column;gap:18px;padding-block:20px;flex:1}
+.center{text-align:center}
+.eyebrow{font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:var(--muted)}
+h1,h2,h3{margin:0;text-wrap:balance}
+.display{font-family:var(--display);font-weight:400;letter-spacing:.01em;line-height:1.02;text-transform:uppercase}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- buttons ---------- */
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:60px;padding:14px 20px;border-radius:16px;
+  font-family:var(--display);font-size:20px;text-transform:uppercase;letter-spacing:.02em;
+  background:var(--gold);color:#1b1446;box-shadow:0 6px 0 #b8860b, 0 10px 24px rgba(0,0,0,.35);transition:transform .08s, box-shadow .08s}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 #b8860b,0 4px 10px rgba(0,0,0,.3)}
+.btn.ghost{background:var(--stage-3);color:var(--ink);box-shadow:0 5px 0 #17135a}
+.btn.ghost:active{box-shadow:0 1px 0 #17135a}
+.btn.small{min-height:46px;font-size:15px;padding:10px 14px;border-radius:12px}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.link{color:var(--muted);text-decoration:underline;text-underline-offset:3px;font-weight:700;font-size:14px;padding:8px}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;margin-inline:-16px;padding:10px 16px 12px;
+  background:linear-gradient(var(--stage) 80%, rgba(20,18,74,0));display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch}
+.pl{min-width:0;border-radius:14px;padding:8px 10px;background:var(--stage-2);border:2px solid transparent;display:flex;flex-direction:column;gap:2px;transition:border-color .2s, box-shadow .2s}
+.pl.p0{--pc:var(--p1)} .pl.p1{--pc:var(--p2)}
+.pl.right{text-align:right;align-items:flex-end}
+.pl .nm{font-weight:900;font-size:15px;color:var(--pc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pl .money{font-family:var(--display);font-size:22px;color:var(--gold);line-height:1}
+.pl .meta{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);font-weight:700}
+.pl.turn{border-color:var(--pc);box-shadow:0 0 18px color-mix(in srgb,var(--pc) 45%,transparent)}
+.pips{display:inline-flex;gap:3px}
+.pip{width:9px;height:9px;border-radius:50%;border:2px solid var(--gold)}
+.pip.on{background:var(--gold)}
+.mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.rnd{font-family:var(--display);font-size:12px;color:var(--muted);text-align:center;line-height:1.1}
+.iconbtn{width:44px;height:44px;border-radius:12px;background:var(--stage-2);display:grid;place-items:center}
+.iconbtn svg{width:22px;height:22px;fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- home ---------- */
+.marquee{position:relative;border-radius:22px;padding:26px 18px;background:var(--stage-2);text-align:center;
+  border:3px solid var(--gold);box-shadow:0 0 0 6px var(--stage), 0 0 0 8px rgba(255,199,44,.35), 0 18px 40px rgba(0,0,0,.4)}
+.marquee::before{content:"";position:absolute;inset:7px;border-radius:15px;pointer-events:none;
+  background:
+    radial-gradient(circle,var(--gold) 0 3px,transparent 4px) 0 0/22px 100% repeat-x,
+    radial-gradient(circle,var(--gold) 0 3px,transparent 4px) 0 100%/22px 8px repeat-x;
+  opacity:.9;animation:bulbs 1s steps(2) infinite}
+@keyframes bulbs{50%{opacity:.35}}
+.logo{font-family:var(--display);font-size:clamp(40px,13vw,68px);line-height:.92;color:var(--gold);text-shadow:4px 4px 0 var(--p1), 8px 8px 0 rgba(0,0,0,.3)}
+.logo span{display:block;color:var(--ink);text-shadow:4px 4px 0 var(--p2), 8px 8px 0 rgba(0,0,0,.3)}
+.tag{color:var(--muted);font-weight:700;margin-top:12px}
+.modes{display:grid;gap:14px}
+.mode{border-radius:20px;padding:22px 20px;text-align:left;display:flex;flex-direction:column;gap:6px;min-height:120px;justify-content:center;
+  background:var(--stage-2);border:3px solid var(--mc);box-shadow:0 7px 0 color-mix(in srgb,var(--mc) 55%,#000);transition:transform .08s}
+.mode:active{transform:translateY(4px)}
+.mode .display{font-size:clamp(24px,7.4vw,34px);color:var(--mc)}
+.mode .blank{display:inline-block;min-width:2.4em;border-bottom:5px solid currentColor;transform:translateY(-.1em)}
+.mode small{color:var(--muted);font-weight:700;font-size:14px}
+.how{background:rgba(255,255,255,.04);border-radius:16px;padding:14px 16px;color:var(--muted);font-size:14px}
+.how b{color:var(--ink)}
+.how ol{margin:6px 0 0;padding-left:20px;display:grid;gap:4px}
+
+/* ---------- setup ---------- */
+.panel{background:var(--stage-2);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.txt{min-height:56px;border-radius:12px;border:2px solid var(--line);background:var(--stage);padding:10px 14px;font-size:20px;font-weight:800;width:100%}
+.txt.p0{border-color:var(--p1)} .txt.p1{border-color:var(--p2)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{min-width:56px;min-height:48px;padding:6px 12px;border-radius:12px;background:var(--stage);border:2px solid var(--line);font-weight:900;font-size:18px}
+.seg button.on{background:var(--gold);color:#1b1446;border-color:var(--gold)}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper button{width:52px;height:52px;border-radius:12px;background:var(--stage-3);font-size:26px;font-weight:900}
+.stepper .val{min-width:84px;text-align:center;font-family:var(--display);font-size:28px;color:var(--gold)}
+.hint{font-size:13px;color:var(--muted)}
+.err{color:var(--bad);font-weight:800;min-height:1.3em;font-size:15px}
+.modechip{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.modechip .display{font-size:18px;color:var(--gold)}
+
+/* ---------- category reveal ---------- */
+.reveal-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px}
+.cat-title{font-family:var(--display);text-transform:uppercase;font-size:clamp(30px,9.5vw,54px);line-height:1.04;color:var(--ink);text-align:center}
+.cat-title .w{display:inline-block;white-space:nowrap}
+.cat-title .l{display:inline-block;animation:drop .5s cubic-bezier(.2,1.6,.4,1) both}
+.cat-title .w:nth-child(n+3) .l{color:var(--gold)}
+@keyframes drop{from{opacity:0;transform:translateY(-60px) rotate(-12deg) scale(1.4)}to{opacity:1;transform:none}}
+.money-reset{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.chip{border-radius:999px;padding:6px 14px;font-weight:800;font-size:14px;background:var(--stage-2)}
+.chip.p0{color:var(--p1)} .chip.p1{color:var(--p2)}
+.secret{align-self:center}
+
+/* ---------- coin ---------- */
+.coin-stage{display:grid;place-items:center;perspective:800px;padding:20px 0}
+.coin{width:180px;height:180px;position:relative;transform-style:preserve-3d}
+.coin.spin{animation:flip 2.2s cubic-bezier(.2,.7,.2,1) forwards}
+.face{position:absolute;inset:0;border-radius:50%;display:grid;place-items:center;backface-visibility:hidden;
+  font-family:var(--display);font-size:22px;color:#1b1446;padding:18px;text-align:center;line-height:1.05;word-break:break-word;
+  border:8px solid rgba(0,0,0,.18);box-shadow:inset 0 0 0 4px rgba(255,255,255,.35)}
+.face.f0{background:var(--p1)}
+.face.f1{background:var(--p2);transform:rotateY(180deg)}
+@keyframes flip{from{transform:rotateY(0) translateY(0)}45%{transform:rotateY(calc(var(--end) * .5)) translateY(-70px)}to{transform:rotateY(var(--end)) translateY(0)}}
+.coin-result{min-height:70px;text-align:center}
+.coin-result .display{font-size:26px}
+.fade-in{animation:fadeup .5s ease both}
+@keyframes fadeup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* ---------- item / lot ---------- */
+.lot-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.lot-head .cat{font-weight:900;color:var(--gold);font-size:14px;text-transform:uppercase;letter-spacing:.06em;min-width:0}
+.lot-card{position:relative;border-radius:22px;padding:30px 18px 26px;text-align:center;background:var(--ink);color:#1b1446;
+  box-shadow:0 0 0 4px var(--gold), 0 0 50px rgba(255,199,44,.35);overflow:hidden;min-height:170px;display:flex;flex-direction:column;justify-content:center;gap:10px;
+  animation:cardin .7s cubic-bezier(.2,1.3,.4,1) both}
+.lot-card::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.75) 50%,transparent 70%);transform:translateX(-120%);animation:shine 1.1s .35s ease-out both;pointer-events:none}
+@keyframes cardin{from{opacity:0;transform:perspective(700px) rotateY(-95deg) scale(.7)}to{opacity:1;transform:none}}
+@keyframes shine{to{transform:translateX(120%)}}
+.lot-no{font-weight:900;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#6b63c9}
+.lot-name{font-family:var(--body);font-weight:900;font-size:clamp(28px,8.4vw,44px);line-height:1.05;text-wrap:balance}
+.lot-name.long{font-size:clamp(22px,6vw,30px)}
+.turn-banner{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:900;font-size:18px;padding:10px 14px;border-radius:14px;
+  background:color-mix(in srgb,var(--tc) 18%,transparent);color:var(--tc);border:2px dashed var(--tc)}
+.turn-banner .dot{width:12px;height:12px;border-radius:50%;background:var(--tc);animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.5}}
+.paddles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.paddle{--pc:var(--p1);position:relative;border-radius:18px 18px 18px 18px;padding:14px 10px 12px;min-height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  background:var(--stage-2);border:3px solid var(--pc);color:var(--ink);min-width:0;transition:transform .1s, background .15s}
+.paddle.p1{--pc:var(--p2)}
+.paddle .pn{font-weight:900;font-size:19px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.paddle .pm{font-size:13px;color:var(--muted);font-weight:700}
+.paddle .no{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--pc);color:#1b1446;font-family:var(--display);font-size:13px;border-radius:999px;padding:2px 10px}
+.paddle.sel{background:var(--pc);color:#1b1446;transform:scale(1.03)}
+.paddle.sel .pm{color:#1b1446}
+.paddle[disabled]{opacity:.35}
+.price-row{display:flex;align-items:center;gap:8px}
+.price-row .stepbtn{width:56px;height:64px;border-radius:14px;background:var(--stage-3);font-size:30px;font-weight:900;flex:none}
+.price{flex:1;min-width:0;display:flex;align-items:center;border-radius:14px;background:var(--stage);border:3px solid var(--gold);padding:0 12px;height:64px}
+.price span{font-family:var(--display);font-size:30px;color:var(--gold)}
+.price input{flex:1;min-width:0;border:0;background:transparent;font-family:var(--display);font-size:34px;color:var(--gold);padding:0 6px;outline:none;width:100%}
+.quick{display:flex;gap:8px;flex-wrap:wrap}
+.quick button{flex:1;min-width:58px;min-height:44px;border-radius:10px;background:var(--stage-2);font-weight:900;border:2px solid var(--line)}
+.actions{display:grid;gap:10px}
+.toolrow{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.stamp{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;z-index:50}
+.stamp div{font-family:var(--display);font-size:clamp(34px,11vw,60px);color:var(--bad);border:6px solid var(--bad);border-radius:14px;padding:6px 18px;background:rgba(20,18,74,.85);
+  transform:rotate(-10deg);animation:stamp .9s ease both;text-align:center;line-height:1}
+.stamp small{display:block;font-size:.38em;color:var(--ink);margin-top:6px}
+@keyframes stamp{0%{opacity:0;transform:rotate(-10deg) scale(2.4)}18%{opacity:1;transform:rotate(-10deg) scale(1)}80%{opacity:1}100%{opacity:0;transform:rotate(-10deg) scale(.95)}}
+.toast{background:var(--stage-3);border-radius:14px;padding:12px 14px;font-weight:700;border-left:6px solid var(--gold)}
+
+/* ---------- rosters ---------- */
+.rosters{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.roster{--pc:var(--p1);min-width:0;background:var(--stage-2);border-radius:16px;border-top:6px solid var(--pc);padding:12px 10px;display:flex;flex-direction:column;gap:8px}
+.roster.p1{--pc:var(--p2)}
+.roster h3{font-weight:900;font-size:17px;color:var(--pc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ri{display:flex;justify-content:space-between;gap:6px;font-size:14px;font-weight:700;border-bottom:1px solid var(--line);padding-bottom:6px}
+.ri span:first-child{min-width:0;overflow-wrap:anywhere}
+.ri .pr{color:var(--gold);flex:none}
+.ri .auto{color:var(--muted);font-size:11px;display:block;font-weight:700}
+.left{display:flex;justify-content:space-between;font-weight:900;font-size:14px;color:var(--muted)}
+.left b{color:var(--gold)}
+
+/* ---------- judge ---------- */
+.judge{flex:1;display:flex;flex-direction:column;justify-content:center;gap:24px;text-align:center}
+.judge h2{font-family:var(--display);font-size:clamp(28px,8.5vw,44px);line-height:1.05;color:var(--gold);animation:throb 1.2s ease-in-out infinite}
+@keyframes throb{50%{opacity:.6;transform:scale(.98)}}
+.scan{position:relative;height:120px;border-radius:16px;background:var(--stage-2);overflow:hidden;display:flex;align-items:flex-end;gap:5px;padding:12px}
+.scan i{flex:1;background:linear-gradient(var(--p2),var(--p1));border-radius:4px 4px 0 0;animation:bar 0.9s ease-in-out infinite alternate}
+.scan::after{content:"";position:absolute;top:0;bottom:0;width:30%;background:linear-gradient(90deg,transparent,rgba(255,199,44,.5),transparent);animation:sweep 1.6s linear infinite}
+@keyframes bar{from{height:12%}to{height:95%}}
+@keyframes sweep{from{left:-30%}to{left:100%}}
+.status{font-weight:800;font-size:18px;min-height:1.5em}
+.checks{display:grid;gap:6px;text-align:left;max-width:320px;margin:0 auto;width:100%}
+.checks div{color:var(--muted);font-weight:700;font-size:14px}
+.checks div.done{color:var(--good)}
+
+/* ---------- results ---------- */
+.res-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.res{--pc:var(--p1);min-width:0;background:var(--stage-2);border-radius:16px;border-top:6px solid var(--pc);padding:12px 10px;display:flex;flex-direction:column;gap:8px}
+.res.p1{--pc:var(--p2)}
+.res.win{box-shadow:0 0 0 3px var(--gold), 0 0 30px rgba(255,199,44,.4)}
+.res h3{font-weight:900;font-size:17px;color:var(--pc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc{display:flex;flex-direction:column;gap:3px;border-bottom:1px solid var(--line);padding-bottom:8px;opacity:.18;transition:opacity .3s}
+.sc.in{opacity:1}
+.sc .top{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.sc .it{font-weight:900;font-size:14px;min-width:0;overflow-wrap:anywhere}
+.sc .pts{font-family:var(--display);font-size:22px;flex:none}
+.sc .why{font-size:12.5px;color:var(--muted);line-height:1.3}
+.pts.hi{color:var(--good)} .pts.mid{color:var(--gold)} .pts.lo{color:var(--bad)}
+.total{display:flex;justify-content:space-between;align-items:baseline;font-weight:900}
+.total b{font-family:var(--display);font-size:34px;color:var(--gold)}
+.roast{font-size:13.5px;font-style:italic;color:var(--ink);background:rgba(255,255,255,.05);border-radius:10px;padding:8px}
+.winner{text-align:center;border-radius:20px;padding:18px 14px;background:var(--gold);color:#1b1446;animation:pop .6s cubic-bezier(.2,1.6,.4,1) both}
+.winner .display{font-size:clamp(30px,10vw,52px)}
+.winner p{margin:6px 0 0;font-weight:800}
+@keyframes pop{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
+.source{font-size:12.5px;color:var(--muted);text-align:center}
+
+/* ---------- champion ---------- */
+.champ{flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px;text-align:center}
+.trophy{width:150px;height:150px;margin:0 auto;animation:pop .8s cubic-bezier(.2,1.6,.4,1) both}
+.champ .name{font-family:var(--display);font-size:clamp(40px,13vw,72px);line-height:1;color:var(--cc);text-shadow:4px 4px 0 rgba(0,0,0,.35);overflow-wrap:anywhere}
+
+/* ---------- menu sheet ---------- */
+.sheet-bg{position:fixed;inset:0;background:rgba(8,6,30,.7);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:560px;background:var(--stage-2);border-radius:22px 22px 0 0;padding:18px 16px calc(22px + env(safe-area-inset-bottom,0px));display:grid;gap:10px;animation:fadeup .25s ease both}
+.sheet .eyebrow{text-align:center}
+#fx{position:fixed;inset:0;pointer-events:none;z-index:60}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
+</style>
+
+</head>
+<body>
+<div id="app"></div>
+<canvas id="fx"></canvas>
+
+<script>
+/* =====================================================================
+   CATEGORY DATA — edit freely.
+   Format: { name: "Build the Perfect Face", items: [ ...10 items ] }
+   In every list the FIRST 5 items are the good ones and the LAST 5 are
+   the bad ones (the app shuffles them; the order is only used by the
+   backup judge and when "items per category" is set below 10).
+   ===================================================================== */
+const CATEGORIES = {
+  draft: [
+    { name: "Draft the Best Candy", items: ["Reese's","Sour Patch Kids","KitKat","Twix","Snickers","Candy corn","Black licorice","Tootsie Roll","Circus peanuts","Sugar-free gummy bears"] },
+    { name: "Draft the Best Disney Characters", items: ["Stitch","Simba","Moana","Genie","Buzz Lightyear","Hei Hei","Flounder","Sneezy","Pua the pig","Meeko"] },
+    { name: "Draft the Best Movies", items: ["Spider-Verse","Avengers: Endgame","Top Gun: Maverick","The Dark Knight","Interstellar","The Emoji Movie","Cats","Madame Web","Morbius","Cars 2"] },
+    { name: "Draft the Best NFL Players", items: ["Patrick Mahomes","Josh Allen","Lamar Jackson","Ja'Marr Chase","Justin Jefferson","Backup punter","Long snapper","Practice squad kicker","Water boy","Team mascot"] },
+    { name: "Draft the Best Cereal", items: ["Cinnamon Toast Crunch","Reese's Puffs","Lucky Charms","Froot Loops","Frosted Flakes","Raisin Bran","Plain Cheerios","Bran flakes","Grape-Nuts","Shredded Wheat"] },
+    { name: "Draft the Best Chips", items: ["Hot Cheetos","Takis","Cool Ranch Doritos","Pringles","Lay's","Rice cakes","Baked Lay's","Veggie straws","Unsalted chips","Bag that's half air"] },
+    { name: "Draft the Best Drinks", items: ["Baja Blast","Dr Pepper","Sprite","Celsius","Arizona tea","Prune juice","Warm milk","Tap water","Flat soda","Coconut water"] },
+    { name: "Draft the Best Ice Cream", items: ["Cookie dough","Cookies & cream","Mint chip","Birthday cake","Chocolate","Rum raisin","Butter pecan","Sugar-free vanilla","Freezer-burned anything","Neapolitan with only strawberry left"] },
+    { name: "Draft the Best Superpowers", items: ["Flying","Teleporting","Invisibility","Super speed","Time travel","Always know what time it is","Talk to fish","Super speed but only walking","Make toast with your hands","Invisible only when nobody's looking"] },
+    { name: "Draft the Best Pizza Toppings", items: ["Pepperoni","Extra cheese","Sausage","Bacon","Stuffed crust","Anchovies","Olives","Mushrooms","Green peppers","Burnt crust"] },
+    { name: "Draft the Best Pet", items: ["Golden retriever","Husky","Capybara","Pet tiger","Corgi","Pet rock","Goldfish","Hermit crab","Snail","Cat that hates you"] },
+    { name: "Draft the Best Vacation Spot", items: ["Japan","Dubai","Maldives","Disney World","Bali","Your aunt's house","Campground with no bathroom","Airport layover","Motel by the highway","Grandma's house with no Wi-Fi"] },
+    { name: "Draft the Best Fast Food", items: ["Chick-fil-A","Raising Cane's","McDonald's","Popeyes","Five Guys","Hospital cafeteria","School lunch","Gas station hot dog","Airport food","Cold leftovers"] },
+    { name: "Draft the Best Video Games", items: ["Minecraft","Fortnite","GTA V","NBA 2K","Call of Duty","Prodigy Math","Free game with 30-sec ads","Solitaire","Dinosaur game when the Wi-Fi's down","Cooking Mama"] },
+    { name: "Draft the Best Pokémon", items: ["Charizard","Pikachu","Mewtwo","Lucario","Rayquaza","Magikarp","Bidoof","Garbodor","Metapod","Trubbish"] },
+    { name: "Draft the Best Superheroes", items: ["Spider-Man","Batman","Iron Man","Superman","Thor","Aquaman","Hawkeye","Squirrel Girl","Matter-Eater Lad","Captain Underpants"] },
+    { name: "Draft the Best Villains", items: ["Thanos","Joker","Darth Vader","Voldemort","Scar","Plankton","Lord Farquaad","Swiper","Team Rocket","Doofenshmirtz"] },
+    { name: "Draft the Best Cartoon Characters", items: ["SpongeBob","Peter Griffin","Homer Simpson","Rick","Gumball","Caillou","Barney","Teletubbies","Boots the monkey","Max from Max & Ruby"] },
+    { name: "Draft the Best NBA Players", items: ["LeBron James","Steph Curry","Giannis","Jokić","SGA","15th man on the bench","Team mascot","Your middle school coach","Halftime show kid","Ball boy"] },
+    { name: "Draft the Best Shoes", items: ["Jordan 4s","Air Force 1s","Dunks","New Balance 550s","Yeezy slides","Light-up Skechers","Crocs with socks","Velcro shoes","Walmart dress shoes","Toe shoes"] },
+    { name: "Draft the Best Apps", items: ["TikTok","YouTube","Snapchat","Instagram","Spotify","Calculator","Facebook","Weather app","Duolingo","LinkedIn"] },
+    { name: "Draft the Dream Job", items: ["Streamer","NBA player","YouTuber","Pilot","CEO","Toll booth worker","Porta-potty cleaner","Telemarketer","Mall cop","Sign spinner"] },
+    { name: "Draft the Best Halloween Costume", items: ["Spider-Man suit","Ghostface","Michael Myers","Inflatable dino","Squid Game guard","Bedsheet ghost","Your normal clothes","Just cat ears","Cardboard box robot","Last-minute costume from Walgreens"] },
+    { name: "Draft the Best Christmas Gifts", items: ["PS5","$500 cash","New iPhone","AirPods","Gaming PC","Socks","Coal","Ugly sweater","Toothbrush","Gift card to a store you never go to"] },
+    { name: "Draft the Sport You're Pro At", items: ["Basketball","Football","Soccer","Boxing","Baseball","Curling","Race walking","Cornhole","Hopscotch","Ping pong"] },
+    { name: "Draft the Best Restaurants", items: ["Texas Roadhouse","Cheesecake Factory","Olive Garden","Chipotle","Hibachi","Golden Corral","Denny's at 4am","IKEA cafeteria","Bowling alley food","Mall food court sushi"] },
+    { name: "Draft the Best Sauces", items: ["Ranch","Chick-fil-A sauce","Cane's sauce","BBQ","Buffalo","Mayo","Tartar sauce","Relish","Mustard","Thousand Island"] },
+    { name: "Draft the Best Fruits", items: ["Mango","Watermelon","Strawberries","Grapes","Pineapple","Grapefruit","Brown banana","Durian","Dates","Prunes"] },
+    { name: "Draft the Best Desserts", items: ["Crumbl cookie","Cheesecake","Brownies","Churros","Ice cream sundae","Raisin cookies","Fruitcake","Sugar-free cake","Jell-O with fruit in it","Plain yogurt"] },
+    { name: "Draft the Best Streamers", items: ["Kai Cenat","IShowSpeed","MrBeast","Duke Dennis","Jynxzi","Your friend's 0-viewer stream","Little brother's Roblox stream","Grandma on Facebook Live","Streamer with a muted mic","Guy who streams homework"] },
+    { name: "Draft the Best Rappers", items: ["Drake","Kendrick Lamar","Travis Scott","J. Cole","Lil Baby","Your cousin's SoundCloud","Kidz Bop","Kid at the talent show","Your dad freestyling","Car commercial jingle"] },
+    { name: "Draft the Best Soccer Players", items: ["Messi","Ronaldo","Mbappé","Haaland","Lamine Yamal","Rec league goalie","The ref","Kid picking grass","Goalie with glasses","Benchwarmer"] },
+    { name: "Draft the Best Anime", items: ["Naruto","Dragon Ball Z","One Piece","Demon Slayer","Jujutsu Kaisen","Boruto","Filler episodes","Dragonball Evolution","Live-action Death Note","Bad English dub"] },
+    { name: "Draft the Best YouTubers", items: ["MrBeast","Sidemen","Dude Perfect","Ryan Trahan","Mark Rober","Cocomelon","Your uncle's vlog","Unboxing channel with 3 subs","Kid toy reviews","10-hour loop channel"] },
+    { name: "Draft the Best Fortnite Skins", items: ["Renegade Raider","Black Knight","Travis Scott","Midas","Goku","Default skin","Tomatohead","Fishstick","Jonesy","Bot skin"] },
+    { name: "Draft the Best Clothing Brands", items: ["Nike","Essentials","Jordan","Supreme","Lululemon","Walmart brand","Shein","Hand-me-downs","Old Navy flag tee","Dollar store"] },
+    { name: "Draft the Best Consoles", items: ["PS5","Switch 2","Xbox Series X","Gaming PC","Steam Deck","Wii U","Xbox Kinect","LeapFrog Leapster","Mom's old laptop","DS with a broken hinge"] },
+    { name: "Draft the Best Board Games", items: ["Uno","Monopoly","Connect 4","Jenga","Uno No Mercy","Candy Land","Chutes and Ladders","Go Fish","Checkers","Puzzle missing a piece"] },
+    { name: "Draft the Best Childhood Toys", items: ["LEGO","Nerf blaster","Hot Wheels","Beyblades","Squishmallow","A stick","Bouncy ball","Slinky","Paddle ball","Yo-yo that won't come back up"] },
+    { name: "Draft Your Bodyguard Animal", items: ["Grizzly bear","Silverback gorilla","Tiger","Hippo","Rhino","Chihuahua","Sloth","Goldfish","Pigeon","Hamster"] },
+    { name: "Draft the Best Ways to Get Around", items: ["Private jet","Lambo","Jetpack","Teleporter","E-bike","City bus","Unicycle","Mom dropping you off","Scooter with a dead battery","Walking in the rain"] },
+    { name: "Draft the Best Gas Station Snacks", items: ["Slushie","Takis","Beef jerky","Honey bun","Monster","3-day-old hot dog","Gas station sushi","Pickle in a bag","Expired sandwich","Sugar-free gum"] },
+    { name: "Draft the Best Excuses", items: ["\"My phone died\"","\"Traffic\"","\"I was sick\"","\"Wi-Fi went out\"","\"Family emergency\"","\"My dog ate it\"","\"I forgot\"","\"Didn't feel like it\"","\"I thought it was tomorrow\"","\"I was asleep\""] },
+    { name: "Draft the Best Social Media", items: ["TikTok","Instagram","YouTube","Snapchat","Discord","Facebook","LinkedIn","Pinterest","BeReal","Threads"] },
+    { name: "Draft the Best Party Theme", items: ["Pool party","Casino night","Glow party","Foam party","Halloween bash","Taxes theme","Spreadsheet party","Board meeting theme","Silent party","Study party"] },
+    { name: "Draft the Best Music Genres", items: ["Hip-hop","R&B","Pop","EDM","Country","Polka","Elevator music","Opera","Kazoo covers","Whale sounds"] },
+    { name: "Draft the Best Kid Movies", items: ["Toy Story","Shrek","The Lion King","Finding Nemo","Monsters Inc.","Chicken Little","Shark Tale","Planes","Barney's Great Adventure","Cars 2"] },
+    { name: "Draft the Best Olympic Events", items: ["100m dash","Basketball","Gymnastics","Swimming","Boxing","Race walking","Curling","Horse dressage","Badminton","Trampoline"] },
+    { name: "Draft the Best Phones", items: ["iPhone 17 Pro Max","Galaxy S25 Ultra","Pixel 10","iPhone 16","Galaxy Z Fold","Flip phone","Kids' tablet","Cracked iPhone 6","Mom's old Android","Phone with no case and no screen protector"] },
+    { name: "Draft the Best Cars", items: ["Lamborghini","Ferrari","Rolls-Royce","Hellcat","G-Wagon","Minivan","Prius","PT Cruiser","Smart car","Golf cart"] }
+  ],
+  build: [
+    { name: "Build the Perfect Day", items: ["Sleep in","No school","Chick-fil-A for lunch","Find $100","Hoop with the boys","Took a dump in your pants and it's in there the whole day","Phone dies at 9am","Mom makes you clean the whole house","Stuck in traffic for 3 hours","Your crush leaves you on read"] },
+    { name: "Build the Perfect Face", items: ["Sigma jawline","Hunter eyes","Clear skin","Perfect smile","Dimples","Big tattoo of your name on your forehead","Unibrow that won't come off","Braces with food stuck in them","Giant pimple on your nose every day","Patchy mustache you refuse to shave"] },
+    { name: "Build the Perfect Haircut", items: ["Low taper fade","Waves","Twists","Fresh lineup","Mid part","They accidentally gave you a McDonald's lineup","Your mom cuts it","Bowl cut","Bald spot in the back","Barber sneezed mid-cut"] },
+    { name: "Build the Perfect Backyard", items: ["Pool","Hot tub","Basketball court","Fire pit","Outdoor TV","Mosquitoes everywhere","Pool is green","Neighbor's dog barks all day","Dog poop everywhere","Grass is all dirt"] },
+    { name: "Build the Perfect Beach Day", items: ["Sunny and 85","Jet ski","Clear water","Beach volleyball","Ice cream truck","Sunburned so bad you can't move","Stung by a jellyfish","Seagull steals your food","Sand in everything","Forgot your swim trunks"] },
+    { name: "Build the Perfect Christmas", items: ["PS5 under the tree","Snow outside","Big breakfast","Cash in a card","All-day game marathon","It's also your birthday","Your brother gets what you wanted","All you get is socks","Relatives ask about your grades all day","Power goes out"] },
+    { name: "Build the Perfect Gaming Day", items: ["Win streak","Unlimited snacks","Squad online","New game drop","Fast Wi-Fi","Super laggy the whole day","Dorito dust everywhere","Your dog chews your controller","You're in a tournament and your teammate is buns","Mom turns off the Wi-Fi"] },
+    { name: "Build the Perfect School Day", items: ["No homework","Field trip","Pizza Friday","Half day","Chill sub","State testing","Group project and you do everything","Fire drill in the rain","Phone gets taken","Teacher calls your mom"] },
+    { name: "Build the Perfect Car", items: ["Lambo body","Hellcat engine","Starlight headliner","Massage seats","Self-driving","Personal chauffeur but he brings his kids and you're squished in the back","Check engine light always on","AC only blows hot air","Smells like old fries","Radio stuck on one station"] },
+    { name: "Build the Perfect House", items: ["Indoor pool","Movie theater","Gaming room","Basketball court","Walk-in closet","You get robbed twice a year","One bathroom for 8 people","Ants in the kitchen","No AC in the summer","Walls so thin you hear everything"] },
+    { name: "Build the Perfect Room", items: ["King bed","LED lights","TV on the wall","Mini fridge","Gaming setup","It's always super hot and there's no fan","Share a bunk bed with your brother","Floor creaks every step","Sun hits your face at 6am","No outlet near your bed"] },
+    { name: "Build the Perfect Breakfast", items: ["Pancakes","Bacon","Waffles","Chick-fil-A minis","French toast","Eggshells in your eggs","Green juice","Milk is expired","Burnt toast","Soggy cereal"] },
+    { name: "Build the Perfect Vacation", items: ["Ocean-view hotel","Private pool","Water park","Unlimited food","First-class flight","It's raining the whole time","Airline loses your luggage","Sunburned on day one","Share a bed with your brother","Hotel has no Wi-Fi"] },
+    { name: "Build the Perfect Outfit", items: ["Essentials hoodie","Jordans","Gold chain","Fresh fitted","Cargo pants","Pink skinny jeans","Super tight Under Armour shirt","Pacifier necklace","Fedora","Crocs with socks"] },
+    { name: "Build the Perfect Gaming Setup", items: ["240Hz monitor","PS5 Pro","Gaming PC","Wireless headset","RGB lights","Stick drift","Sticky keyboard","Chair squeaks every time you move","Dead pixel in the middle of the screen","Wi-Fi drops every 10 minutes"] },
+    { name: "Build the Perfect Bunker", items: ["Unlimited food","Water filter","Generator","PS5","Your best friend","No lights","Only food is canned beans","Your annoying cousin is in there too","No bathroom","Door gets stuck"] },
+    { name: "Build the Perfect Birthday", items: ["Hotel pool party","Ice cream cake","Go-karts","DJ","Cash in every card","Only 2 people show up","Mom sings loud in public","Rains all day","Your gift is a sweater","Your sibling blows out your candles"] },
+    { name: "Build the Perfect Fortnite Player", items: ["Peterbot mechanics","SypherPK reaction time","Bugha game sense","Clix editing","Ninja's hype","Aims with a trackpad","Lags every fight","Little brother screaming in your mic","Mom calls you for dinner mid-game","Teammate is buns"] },
+    { name: "Build the Perfect Fast Food Run", items: ["Chick-fil-A sandwich","McDonald's fries","Cane's toast","Wendy's Frosty","Baja Blast","They forgot your fries","McFlurry machine is broken","Nuggets missing from the box","Burger is smashed","Wrong order and you're already home"] },
+    { name: "Build the Perfect Sleepover", items: ["Pizza","2K tournament","Scary movie","Late-night Taco Bell run","Prank war","You have to sleep on the ground","Fall asleep first and get pranked","Parents check on you every 10 minutes","Someone snores all night","Mom picks you up at 8am"] },
+    { name: "Build the Perfect Snow Day", items: ["No school","Sledding","Snowball fight","Hot chocolate","Movie marathon","You still have to go to school","School gets snowed in and you have to sleep there","Shovel the whole driveway","Power goes out","Snow melts by noon"] },
+    { name: "Build the Perfect Summer", items: ["Pool every day","No school","Beach trip","Stay up late","Summer job that pays good","Summer school","Mosquitoes eat you alive","AC breaks in July","Summer reading list","Parents send you to camp"] },
+    { name: "Build the Perfect Weekend", items: ["Sleep in","Party","Go-karts","Concert","Gaming all night","Scroll 8 hours a day","You have to clean","Mow the lawn","Babysit your siblings","Homework due Monday"] },
+    { name: "Build the Perfect Gym", items: ["Free protein shakes","Sauna","Basketball court","Personal trainer","Never crowded","Treadmill breaks mid-run","Guy grunting loud next to you","No AC","Smells like feet","Every bench taken"] },
+    { name: "Build the Perfect Thanksgiving", items: ["Turkey","Mac & cheese","Mashed potatoes","Stuffing","Rolls","Turkey is dry","Aunt brings raisin potato salad","Canned cranberry sauce","Stuck at the kids' table","Relatives ask why you're single"] },
+    { name: "Build the Perfect Sandwich", items: ["Steak","Bacon","Cheese","Toasted bread","Fried chicken","Bread is soggy","Mayo everywhere","Raw onion","Egg salad","Tuna that smells up the room"] },
+    { name: "Build the Perfect Burger", items: ["Wagyu patty","Bacon","American cheese","Brioche bun","Grilled onions","Bun falls apart","Pineapple ring","Peanut butter","Burnt patty","Raw in the middle"] },
+    { name: "Build the Perfect Road Trip", items: ["Snack bag","Good playlist","Buc-ee's stop","Aux cord","Window seat","Sibling throws up on you","No service for 3 hours","Flat tire","Gas station bathroom","Dad won't stop for food"] },
+    { name: "Build the Perfect Movie Night", items: ["Recliner seats","Buttered popcorn","IMAX","Free refills","Opening night","Kid kicks your seat the whole movie","Couple talking the whole time","Front row neck pain","Phone light in your face","Spill your drink in the first 5 minutes"] },
+    { name: "Build the Perfect Hotel Stay", items: ["Room service","Ocean view","Rooftop pool","Free breakfast","Free upgrade","Room next to the ice machine","AC is broken","You hear the people next door","Pool is closed","Hair in the shower"] },
+    { name: "Build the Perfect Flight", items: ["First class","Free Wi-Fi","Window seat","Free snacks","Land early","Middle seat","Baby crying the whole flight","Guy's feet on your armrest","Lost luggage","6-hour delay"] },
+    { name: "Build the Perfect Theme Park Day", items: ["No lines","Fastest coaster","Water park","Free food","Fast pass","3-hour lines","100° heat","Ride breaks down while you're on it","Throw up on the coaster","Too short for every ride"] },
+    { name: "Build the Perfect Mall Trip", items: ["Nike store","Food court","Arcade","Apple store","Cash to spend","Carry your mom's bags all day","Parked 10 minutes away","Kiosk guy chases you","Only window shopping","Run into your teacher"] },
+    { name: "Build the Perfect Zombie Kit", items: ["Cybertruck","Crossbow","Med kit","Walkie-talkies","Fortified Costco","Flip flops","Stanley cup","Loud friend who won't stop talking","Pool noodle","Phone at 1%"] },
+    { name: "Build the Perfect Island Kit", items: ["Machete","Lighter","Water filter","Fishing rod","Tent","One sock","AirPods with no phone","Empty sunscreen bottle","Beach ball","Book about islands"] },
+    { name: "Build the Perfect Best Friend", items: ["Has a car","Funny","Loyal","Always has snacks","Has a pool","Borrows money and never pays you back","Leaves you on read","Always 2 hours late","Talks through every movie","Dry texter"] },
+    { name: "Build the Perfect Teacher", items: ["No homework","Funny","Extra credit","Lets you use your phone","Curves tests","Spits when talking","Calls on you every time","Seats you next to someone you hate","Pop quiz every Friday","Calls your mom"] },
+    { name: "Build the Perfect Roommate", items: ["Cleans everything","Cooks for you","Pays rent early","Never home","Lends you their car","Eats your food","Snores so loud you can't sleep","Plays drums at 3am","Never cleans","Has 4 cats"] },
+    { name: "Build the Perfect Phone", items: ["Week-long battery","Unbreakable screen","1TB storage","Insane camera","Fast charging","Screen is cracked","Battery dies by lunch","Green bubbles","Storage always full","Charger only works at an angle"] },
+    { name: "Build the Perfect Superhero Suit", items: ["Iron Man armor","Jet boots","Invisibility cloak","Built-in AI","Utility belt","Cape gets stuck in doors","Spandex in winter","Crocs","Mask has no eye holes","Boots squeak every step"] },
+    { name: "Build the Perfect Rizz", items: ["Confidence","Smile","Being funny","Deep voice","Good cologne","Corny pickup lines","Double texting","Dry texting","Stutter every time","Bad breath"] },
+    { name: "Build the Perfect Aura", items: ["Silent stare","Calm under pressure","Clean fit","Being tall","Walking away from drama","Trip in front of everyone","Laugh too loud","Cry in class","Try too hard","Wave back at someone who wasn't waving at you"] },
+    { name: "Build the Perfect Athlete", items: ["Usain Bolt's speed","LeBron's IQ","Steph's shooting","Messi's footwork","Wemby's height","Shaq's free throws","Your gym teacher's knees","Your dad's cardio","Your little brother's handles","The water boy's arm"] },
+    { name: "Build the Perfect Lunch", items: ["Lunchables","Uncrustables","Capri Sun","Gushers","Pizza Lunchable","Tuna sandwich","Celery sticks","Warm milk","Mom's note gets read out loud","Banana smushed all over your bag"] },
+    { name: "Build the Perfect Party", items: ["DJ","Pool","Food truck","Light show","Everyone shows up","Parents come home early","Music dies","Only snack is carrots","Neighbor shuts it down","Nobody dances"] },
+    { name: "Build the Perfect Halloween", items: ["Full-size candy bars","Haunted house","Best costume","Huge candy haul","Scary movie after","Get toothbrushes","Get raisins","Rain ruins your costume","Every porch light is off","Mom takes half your candy"] },
+    { name: "Build the Perfect Pool Day", items: ["Lazy river","Diving board","Water slide","Snack bar","Perfect weather","Water is freezing","Lifeguard whistles every 5 minutes","Adult swim every hour","Lose your goggles","Kid cannonballs on you"] },
+    { name: "Build the Perfect Sunday", items: ["Sleep till noon","Football all day","Big breakfast","Nap","Wings","Homework due tomorrow","Sunday scaries","Chores","Laundry","Alarm set for 6am"] },
+    { name: "Build the Perfect Dog", items: ["Golden retriever","Potty trained","Cuddles","Plays fetch","Guards the house","Barks at everything","Chews your shoes","Smells bad","Runs away","Eats your homework"] },
+    { name: "Build the Perfect Treehouse", items: ["Zip line","Rope ladder","Mini fridge","Wi-Fi","Slide","Wasp nest inside","Spiders everywhere","Splinters","Leaky roof","Ladder missing a step"] }
+  ]
+};
+
+/* ============================ storage ============================ */
+const K = { decks:"auctionDraft.decks.v1", game:"auctionDraft.game.v2", names:"auctionDraft.names.v1", scores:"auctionDraft.itemScores.v1", mute:"auctionDraft.mute.v1" };
+const mem = {};
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); if(v != null) return JSON.parse(v); }catch(e){} return (k in mem) ? mem[k] : d; },
+  set(k, v){ mem[k] = v; try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ============================ helpers ============================ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const shuffle = a => { for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function hash(s){ let h=2166136261; for(const ch of s){ h^=ch.codePointAt(0); h=Math.imul(h,16777619); } return h>>>0; }
+const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+
+/* ============================ sound ============================ */
+let ac = null, muted = !!store.get(K.mute, false), drumTimer = null;
+function A(){ if(!ac){ try{ ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==="suspended") ac.resume(); return ac; }
+function tone(f, dur, type="sine", vol=.2, when=0, slideTo){
+  if(muted) return; const a=A(); if(!a) return; const t=a.currentTime+when;
+  const o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,t);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,t+dur);
+  g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+.012); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.05);
+}
+function noise(dur, vol, when=0, ftype="bandpass", freq=2000){
+  if(muted) return; const a=A(); if(!a) return; const t=a.currentTime+when;
+  const len=Math.max(1,Math.floor(a.sampleRate*dur)), buf=a.createBuffer(1,len,a.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  const s=a.createBufferSource(); s.buffer=buf; const f=a.createBiquadFilter(); f.type=ftype; f.frequency.value=freq;
+  const g=a.createGain(); g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  s.connect(f).connect(g).connect(a.destination); s.start(t); s.stop(t+dur+.02);
+}
+const SFX = {
+  tap(){ tone(720,.05,"square",.04); },
+  chaching(){ noise(.07,.3,0,"highpass",4000); tone(1318,.45,"triangle",.16,.06); tone(1760,.6,"triangle",.15,.14); tone(2637,.5,"sine",.07,.14); noise(.25,.08,.14,"highpass",6000); },
+  reveal(){ noise(.4,.12,0,"bandpass",900); tone(180,.4,"sawtooth",.05,0,900); tone(880,.25,"triangle",.12,.35); },
+  error(){ tone(150,.22,"square",.12); tone(110,.25,"square",.1,.12); },
+  coin(){ for(let i=0;i<14;i++) tone(1500+(i%2)*500,.03,"square",.03,i*.13*(1+i/20)); },
+  tick(){ tone(1400,.035,"square",.035); },
+  fanfare(){ [523,659,784,1047].forEach((f,i)=>tone(f,.3,"triangle",.17,i*.11)); tone(1047,1,"triangle",.17,.5); tone(1319,1,"triangle",.12,.5); tone(1568,1,"sine",.08,.5); },
+  crash(){ noise(1.2,.25,0,"highpass",3000); tone(98,.4,"sine",.25); }
+};
+function startDrumroll(){ stopDrumroll(); let v=.05; drumTimer=setInterval(()=>{ v=Math.min(.22,v+.002); noise(.05,v,0,"bandpass",1600+Math.random()*500); },55); }
+function stopDrumroll(crash){ if(drumTimer){ clearInterval(drumTimer); drumTimer=null; if(crash) SFX.crash(); } }
+
+/* ============================ confetti ============================ */
+function confetti(){
+  if(reduced) return; const c=$("#fx"), x=c.getContext("2d"), dpr=window.devicePixelRatio||1;
+  c.width=innerWidth*dpr; c.height=innerHeight*dpr; x.scale(dpr,dpr);
+  const cols=["#ffc72c","#ff4f9a","#2fd9ee","#fff7e6","#7ef0a0"];
+  const P=Array.from({length:180},()=>({x:innerWidth/2+(Math.random()-.5)*80,y:innerHeight*.35,vx:(Math.random()-.5)*14,vy:-Math.random()*14-4,r:Math.random()*Math.PI,vr:(Math.random()-.5)*.4,w:6+Math.random()*7,h:4+Math.random()*5,c:cols[Math.floor(Math.random()*cols.length)]}));
+  const t0=performance.now();
+  (function f(t){ x.clearRect(0,0,innerWidth,innerHeight);
+    for(const p of P){ p.vy+=.35; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.r+=p.vr; x.save(); x.translate(p.x,p.y); x.rotate(p.r); x.fillStyle=p.c; x.fillRect(-p.w/2,-p.h/2,p.w,p.h); x.restore(); }
+    if(t-t0<4200) requestAnimationFrame(f); else x.clearRect(0,0,innerWidth,innerHeight);
+  })(t0);
+}
+
+/* ============================ AI sampling ============================ */
+const samplePromise = Promise.resolve(null); // standalone build: no AI, built-in judge only
+
+/* ============================ state ============================ */
+const DEFAULT = () => ({
+  screen:"home", mode:null,
+  players: store.get(K.names, ["",""]),
+  settings:{ money:20, items:10, bestOf:3 },
+  score:[0,0], roundNo:1, round:null, verdict:null
+});
+let S = DEFAULT();
+let ui = { sel:null, menu:false, confirm:null, err:"", toast:"" };
+const rosterSize = () => S.settings.items/2;
+const need = () => Math.floor(S.settings.bestOf/2)+1;
+function save(){ store.set(K.game, S); }
+
+/* category deck: used category goes to the back */
+function drawCategory(mode){
+  const list = CATEGORIES[mode]; const decks = store.get(K.decks, {}) || {};
+  let d = decks[mode];
+  const ok = Array.isArray(d) && d.length===list.length && new Set(d).size===list.length && d.every(i=>Number.isInteger(i)&&i>=0&&i<list.length);
+  if(!ok) d = shuffle([...list.keys()]);
+  const idx = d.shift(); d.push(idx); decks[mode]=d; store.set(K.decks, decks);
+  return idx;
+}
+function newRound(){
+  const catIdx = drawCategory(S.mode), cat = CATEGORIES[S.mode][catIdx], n = S.settings.items;
+  const good = shuffle(cat.items.slice(0,5)).slice(0, n/2), bad = shuffle(cat.items.slice(5)).slice(0, n/2);
+  const m = S.settings.money;
+  S.round = { cat:cat.name, items:shuffle(good.concat(bad)), good, idx:0, first:Math.random()<.5?0:1, money:[m,m], rosters:[[],[]], hist:[] };
+  S.verdict = null; S.screen = "category"; ui.sel=null; ui.err=""; ui.toast="";
+}
+const turnOf = i => (S.round.first + i) % 2;
+
+function autoFill(){
+  const r=S.round, R=rosterSize(); let moved=0, to=-1;
+  for(const p of [0,1]){
+    if(r.rosters[p].length>=R){ const o=1-p;
+      while(r.idx<r.items.length && r.rosters[o].length<R){ r.rosters[o].push({item:r.items[r.idx],price:0,auto:true}); r.idx++; moved++; to=o; }
+    }
+  }
+  return {moved,to};
+}
+function recordPick(w, price){
+  const r=S.round;
+  r.hist.push(JSON.stringify({idx:r.idx,money:r.money,rosters:r.rosters}));
+  r.money[w]-=price; r.rosters[w].push({item:r.items[r.idx],price}); r.idx++;
+  const a = autoFill();
+  ui.sel=null; ui.err="";
+  ui.toast = a.moved ? `${S.players[1-a.to]}'s roster is full. ${S.players[a.to]} gets the last ${a.moved} item${a.moved>1?"s":""} for $0.` : "";
+  if(r.idx>=r.items.length) S.screen="roundEnd";
+}
+function undo(){
+  const r=S.round; if(!r || !r.hist.length) return;
+  const h=JSON.parse(r.hist.pop()); r.idx=h.idx; r.money=h.money; r.rosters=h.rosters;
+  S.screen="item"; ui.sel=null; ui.err=""; ui.toast="Last pick undone."; SFX.tap();
+}
+
+/* ============================ rendering ============================ */
+const ICON = {
+  menu:'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+  on:'<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
+  off:'<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>'
+};
+function pips(p){ let s=""; for(let i=0;i<need();i++) s+=`<span class="pip ${i<S.score[p]?"on":""}"></span>`; return `<span class="pips" aria-label="${S.score[p]} round wins">${s}</span>`; }
+function topBar(){
+  const r=S.round, R=rosterSize();
+  const turn = (S.screen==="item" && r && r.idx<r.items.length) ? turnOf(r.idx) : -1;
+  const cell = p => `<div class="pl p${p} ${p?"right":""} ${turn===p?"turn":""}">
+      <div class="nm">${esc(S.players[p])}</div>
+      <div class="money num">$${r?r.money[p]:S.settings.money}</div>
+      <div class="meta num">${r?r.rosters[p].length:0}/${R} ${pips(p)}</div></div>`;
+  return `<div class="topbar">${cell(0)}<div class="mid"><button class="iconbtn" data-act="menu" aria-label="Host menu">${ICON.menu}</button><div class="rnd">RD ${S.roundNo}<br>BO${S.settings.bestOf}</div></div>${cell(1)}</div>`;
+}
+
+function vHome(){
+  return `<div class="screen">
+    <div class="marquee" style="margin-top:14px"><div class="logo">Auction<span>Draft</span></div></div>
+    <div class="modes">
+      <button class="mode" style="--mc:var(--p1)" data-act="mode" data-mode="build"><span class="display">Build the Perfect <span class="blank"></span></span></button>
+      <button class="mode" style="--mc:var(--p2)" data-act="mode" data-mode="draft"><span class="display">Draft the Best <span class="blank"></span></span></button>
+    </div>
+  </div>`;
+}
+function vSetup(){
+  const st=S.settings, modeName = S.mode==="build" ? "Build the Perfect ___" : "Draft the Best ___";
+  const seg = (act, vals, cur, fmt=v=>v) => `<div class="seg">${vals.map(v=>`<button data-act="${act}" data-v="${v}" class="${v===cur?"on":""}">${fmt(v)}</button>`).join("")}</div>`;
+  return `<div class="screen">
+    <div class="modechip"><div class="display">${modeName}</div><button class="link" data-act="home">Change</button></div>
+    <input id="n0" class="txt p0" maxlength="16" autocomplete="off" placeholder="Player 1" aria-label="Player 1 name" value="${esc(S.players[0]||"")}">
+    <input id="n1" class="txt p1" maxlength="16" autocomplete="off" placeholder="Player 2" aria-label="Player 2 name" value="${esc(S.players[1]||"")}">
+    <div class="panel">
+      <div class="field"><label>Money</label>
+        <div class="stepper"><button data-act="money" data-d="-5" aria-label="Less money">−</button><div class="val num">$${st.money}</div><button data-act="money" data-d="5" aria-label="More money">+</button></div></div>
+      <div class="field"><label>Items · ${st.items/2} each</label>${seg("items",[4,6,8,10],st.items)}</div>
+      <div class="field"><label>Best of</label>${seg("bestof",[1,3,5],st.bestOf)}</div>
+    </div>
+    <div class="err" id="err">${esc(ui.err)}</div>
+    <button class="btn" data-act="start">Start Game</button>
+  </div>`;
+}
+function lettered(text){ let i=0; return text.split(" ").map(w=>`<span class="w">${[...w].map(ch=>`<span class="l" style="animation-delay:${(i++)*40}ms">${esc(ch)}</span>`).join("")}</span>`).join(" "); }
+function vCategory(){
+  const r=S.round;
+  return `${topBar()}<div class="screen"><div class="reveal-wrap">
+    <div class="eyebrow center">Round ${S.roundNo}</div>
+    <div class="marquee"><h1 class="cat-title">${lettered(r.cat)}</h1></div>
+  </div>
+  <button class="btn" data-act="toCoin">Next</button></div>`;
+}
+function vCoin(){
+  const r=S.round;
+  return `${topBar()}<div class="screen"><div class="reveal-wrap">
+    <div class="eyebrow center">Who goes first?</div>
+    <div class="coin-stage"><div class="coin" id="coin" style="--end:${(r.first?1980:1800)}deg">
+      <div class="face f0">${esc(S.players[0])}</div><div class="face f1">${esc(S.players[1])}</div></div></div>
+    <div class="coin-result" id="coinRes"></div>
+  </div>
+  <button class="btn" data-act="toItems" id="coinNext" disabled>Start</button></div>`;
+}
+function vItem(){
+  const r=S.round, i=r.idx, item=r.items[i], t=turnOf(i), R=rosterSize();
+  const pad = p => { const full=r.rosters[p].length>=R;
+    return `<button class="paddle p${p} ${ui.sel===p?"sel":""}" data-act="pick" data-p="${p}" ${full?"disabled":""}>
+      <span class="pn">${esc(S.players[p])}</span></button>`; };
+  return `${topBar()}<div class="screen">
+    <div class="lot-head"><span class="cat">${esc(r.cat)}</span><span class="eyebrow num">${i+1} / ${r.items.length}</span></div>
+    ${ui.toast?`<div class="toast">${esc(ui.toast)}</div>`:""}
+    <div class="lot-card" id="lot"><div class="lot-name ${item.length>28?"long":""}">${esc(item)}</div></div>
+    <div class="turn-banner" style="--tc:var(--p${t+1})"><span class="dot"></span>${esc(S.players[t])}'s turn</div>
+    <div class="paddles">${pad(0)}${pad(1)}</div>
+    <div class="price-row"><button class="stepbtn" data-act="step" data-d="-1" aria-label="Lower price">−</button>
+      <label class="price"><span>$</span><input id="price" type="number" inputmode="numeric" min="0" step="1" value="0" aria-label="Winning bid in dollars"></label>
+      <button class="stepbtn" data-act="step" data-d="1" aria-label="Raise price">+</button></div>
+    <div class="err" id="err">${esc(ui.err)}</div>
+    <button class="btn" data-act="sold">Sold!</button>
+    <div class="toolrow">${r.hist.length?`<button class="link" data-act="undo">Undo</button>`:"<span></span>"}<button class="link" data-act="nobid">No bids</button></div>
+  </div>`;
+}
+function rosterCol(p){
+  const r=S.round, spent=r.rosters[p].reduce((a,x)=>a+x.price,0);
+  return `<div class="roster p${p}"><h3>${esc(S.players[p])}</h3>
+    ${r.rosters[p].map(x=>`<div class="ri"><span>${esc(x.item)}</span><span class="pr num">$${x.price}</span></div>`).join("")}
+    <div class="left"><span>Left</span><b class="num">$${r.money[p]}</b></div></div>`;
+}
+function vRoundEnd(){
+  return `${topBar()}<div class="screen">
+    <h2 class="display" style="font-size:24px;color:var(--gold)">${esc(S.round.cat)}</h2>
+    <div class="rosters">${rosterCol(0)}${rosterCol(1)}</div>
+    <button class="btn" data-act="judge">Determine Who Won</button>
+    ${S.round.hist.length?`<button class="link" data-act="undo" style="align-self:center">Undo</button>`:""}
+  </div>`;
+}
+const JUDGE_LINES = ["Checking popularity data…","Consulting the census…","Reading fan polls…","Cross-referencing sales charts…","Measuring synergy…","Calculating vibes…","Asking a random grandma…","Finalizing the verdict…"];
+function vJudge(){
+  return `<div class="screen"><div class="judge">
+    <h2>The judge is deliberating…</h2>
+    <div class="scan">${Array.from({length:16},(_,i)=>`<i style="animation-delay:${(i*97)%900}ms"></i>`).join("")}</div>
+    <div class="status" id="jstatus">${JUDGE_LINES[0]}</div>
+  </div></div>`;
+}
+function ptsClass(s){ return s>=7?"hi":s>=4?"mid":"lo"; }
+function vResults(){
+  const v=S.verdict, done=v.revealed;
+  const col = p => { const pl=v.players[p];
+    return `<div class="res p${p} ${done&&v.winner===p?"win":""}" id="res${p}"><h3>${esc(S.players[p])}</h3>
+      ${pl.items.map((x,k)=>`<div class="sc ${done?"in":""}" id="sc${p}_${k}"><div class="top"><span class="it">${esc(x.item)}</span><span class="pts ${done?ptsClass(x.score):""} num" id="pt${p}_${k}">${done?x.score:"–"}</span></div><div class="why">${esc(x.reason)}</div></div>`).join("")}
+      <div class="total"><span>Total</span><b class="num" id="tot${p}">${done?pl.total:0}</b></div>
+      <div class="roast" id="ro${p}" ${done?"":"hidden"}>${esc(pl.comment)}</div></div>`; };
+  const over = S.score[0]>=need() || S.score[1]>=need();
+  return `${done?topBar():""}<div class="screen">
+    <div id="banner">${done?bannerHTML():""}</div>
+    <div class="res-cols">${col(0)}${col(1)}</div>
+    <div id="after" ${done?"":"hidden"} style="display:grid;gap:12px">
+      ${over?`<button class="btn" data-act="champion">Champion</button>`:`<button class="btn" data-act="next">Next Round</button>`}
+    </div>
+    ${done?"":`<button class="link" data-act="showall" style="align-self:center">Skip</button>`}
+  </div>`;
+}
+function bannerHTML(){
+  const v=S.verdict;
+  if(v.winner<0) return `<div class="winner"><div class="display">Dead heat!</div><p>Same total, same top item, same synergy. Nobody scores this round.</p></div>`;
+  const why = v.how==="total" ? `${v.players[v.winner].total} to ${v.players[1-v.winner].total}` : v.how==="top" ? "Tied on points. Won on the single best item." : v.how==="synergy" ? "Tied on points and top item. Won on synergy." : "Tied almost everywhere. Won on depth of the lineup.";
+  return `<div class="winner"><div class="eyebrow" style="color:#1b1446">Round ${S.roundNo} winner</div><div class="display">${esc(S.players[v.winner])}</div><p>${esc(why)}</p></div>`;
+}
+function vChampion(){
+  const w = S.score[0]>=need()?0:1;
+  return `<div class="screen"><div class="champ" style="--cc:var(--p${w+1})">
+    <svg class="trophy" viewBox="0 0 120 120" aria-hidden="true"><path d="M30 14h60v22c0 20-13 34-30 34S30 56 30 36z" fill="#ffc72c"/><path d="M30 22H14c0 18 8 26 18 28M90 22h16c0 18-8 26-18 28" fill="none" stroke="#ffc72c" stroke-width="7"/><rect x="53" y="68" width="14" height="18" fill="#e0a800"/><rect x="36" y="86" width="48" height="12" rx="3" fill="#ffc72c"/><rect x="28" y="98" width="64" height="12" rx="3" fill="#e0a800"/><path d="M60 26l4 9 10 1-7.5 7 2 10-8.5-5-8.5 5 2-10L46 36l10-1z" fill="#fff7e6"/></svg>
+    <div class="eyebrow">Match champion</div>
+    <div class="name">${esc(S.players[w])}</div>
+    <div class="display num" style="font-size:22px;color:var(--muted)">${S.score[w]} – ${S.score[1-w]}</div>
+  </div>
+  <button class="btn" data-act="newgame">Game Over · New Game</button></div>`;
+}
+function vMenu(){
+  if(!ui.menu) return "";
+  const inRound = ["category","coin","item"].includes(S.screen);
+  const c = ui.confirm;
+  return `<div class="sheet-bg" data-act="closemenu"><div class="sheet" data-stop="1">
+    <div class="eyebrow">Host menu</div>
+    <button class="btn ghost small" data-act="mute">${muted?ICON.off+" Sound is off":ICON.on+" Sound is on"}</button>
+    ${S.round && S.round.hist.length && ["item","roundEnd"].includes(S.screen)?`<button class="btn ghost small" data-act="undo">Undo last pick</button>`:""}
+    ${inRound?`<button class="btn ghost small" data-act="skip">${c==="skip"?"Tap again: skip and clear this round's picks":"Skip this category"}</button>`:""}
+    <button class="btn ghost small" data-act="quit">${c==="quit"?"Tap again: end the match":"End match · New game"}</button>
+    <button class="btn small" data-act="closemenu">Back to the game</button>
+  </div></div>`;
+}
+
+let lastScreen = null;
+function render(){
+  const views = { home:vHome, setup:vSetup, category:vCategory, coin:vCoin, item:vItem, roundEnd:vRoundEnd, judge:vJudge, results:vResults, champion:vChampion };
+  $("#app").innerHTML = (views[S.screen]||vHome)() + vMenu();
+  const entered = lastScreen !== S.screen; lastScreen = S.screen;
+  if(S.screen==="coin" && entered) runCoin();
+  if(S.screen==="coin" && !entered){ const c=$("#coin"); c.style.transform=`rotateY(${S.round.first?1980:1800}deg)`; showCoinResult(); }
+  if(S.screen==="champion" && entered){ SFX.fanfare(); confetti(); }
+  save();
+}
+
+/* ============================ sequences ============================ */
+let coinDone=false;
+function showCoinResult(){
+  const p=S.round.first;
+  $("#coinRes").innerHTML = `<div class="fade-in display" style="color:var(--p${p+1})">${esc(S.players[p])} first</div>`;
+  $("#coinNext").disabled=false;
+}
+function runCoin(){
+  const c=$("#coin"); SFX.coin();
+  if(reduced){ c.style.transform=`rotateY(${S.round.first?1980:1800}deg)`; showCoinResult(); return; }
+  c.classList.add("spin");
+  setTimeout(()=>{ if(S.screen!=="coin") return; c.classList.remove("spin"); c.style.transform=`rotateY(${S.round.first?1980:1800}deg)`; SFX.tick(); showCoinResult(); }, 2250);
+}
+
+function showStamp(name, price){
+  const d=document.createElement("div"); d.className="stamp";
+  d.innerHTML=`<div>Sold!<small>${esc(name)} · $${price}</small></div>`;
+  document.body.appendChild(d); setTimeout(()=>d.remove(), 950);
+}
+
+/* ============================ the judge ============================ */
+const RUBRIC = `You are a strict, impartial judge for a draft game. Score each drafted item from 1–10 based on how good it is for the category's goal, using:
+1. Popularity / general consensus: what most people would agree on (surveys, sales, polls, rankings, fan consensus).
+2. Actual quality / usefulness: how well it serves the category (for "Perfect Face," does it actually look good? For "Bunker," does it actually help you survive?).
+3. Synergy: do the picks work well together as a lineup?
+4. Fairness: judge items, not players. No favorites. Same item = same score every time.
+Personal taste must not decide the outcome. When opinions differ, go with the broad public consensus.
+Money left over does NOT count; only the lineup matters.
+Output JSON: each item's score with a one-line reason, each player's total, a short funny roast or compliment per player, and the winner. If totals tie, break the tie by the single highest-scored item, then by synergy.`;
+
+function scoreKey(item){ return S.round.cat + "|" + item; }
+async function aiJudge(){
+  const sample = await samplePromise;
+  if(!sample) throw { code:"unavailable" };
+  const r=S.round, fixed=store.get(K.scores, {}) || {};
+  const lists=[0,1].map(p=>r.rosters[p].map(x=>x.item).sort((a,b)=>a.localeCompare(b)));
+  const order = lists[0].join("|").toLowerCase() <= lists[1].join("|").toLowerCase() ? [0,1] : [1,0]; // order[0] = Lineup A
+  const known = r.items.filter(it=>fixed[scoreKey(it)]!=null).sort().map(it=>`- ${it}: ${fixed[scoreKey(it)]}`);
+  const prompt = `${RUBRIC}
+
+CATEGORY: "${r.cat}"
+How to read the category: in "Build the Perfect ___" every item becomes part of ONE combined thing, so drawbacks (bad items) make it worse and must score low. In "Draft the Best ___" each item is an option you picked; score how good each option is. Score 1 = terrible for the goal, 10 = as good as it gets.
+
+LINEUP A (${lists[order[0]].length} items):
+${lists[order[0]].map(x=>"- "+x).join("\n")}
+
+LINEUP B (${lists[order[1]].length} items):
+${lists[order[1]].map(x=>"- "+x).join("\n")}
+${known.length?`\nFIXED SCORES from earlier rulings in this category. Reuse these exact numbers so the same item always gets the same score:\n${known.join("\n")}\n`:""}
+Rules:
+- An item's score depends only on the item and the category, never on which lineup holds it.
+- Use whole numbers 1-10. Each reason is one line, at most 14 words.
+- "synergy" is 1-10 for how well that lineup's items work together (used only for tiebreaks).
+- "comment" is one short funny roast or compliment about that lineup, at most 20 words, family-friendly.
+- Copy each item text exactly as given.
+
+Reply with only this JSON:
+{"A":{"items":[{"item":"<exact text>","score":7,"reason":"<one line>"}],"total":0,"synergy":5,"comment":"<text>"},"B":{"items":[...],"total":0,"synergy":5,"comment":"<text>"},"winner":"A"}`;
+  const data = await sample.json(prompt, { modelTier:"default", cache:{ gcTime:86400000 } });
+  if(!data || !data.A || !data.B) throw { code:"invalid_json" };
+  const players=[null,null];
+  ["A","B"].forEach((lab,k)=>{
+    const p=order[k], d=data[lab]||{}, arr=Array.isArray(d.items)?d.items:[];
+    const items = r.rosters[p].map(x=>{
+      const m = arr.find(y=>y && norm(y.item)===norm(x.item)) || arr.find(y=>y && norm(y.item).includes(norm(x.item)));
+      let score = m ? Math.round(Number(m.score)) : NaN;
+      if(!(score>=1 && score<=10)) score = backupScore(x.item);
+      if(fixed[scoreKey(x.item)]!=null) score = fixed[scoreKey(x.item)];
+      return { item:x.item, price:x.price, score, reason: (m && m.reason) ? String(m.reason).slice(0,140) : "The judge shrugged at this one." };
+    });
+    let syn = Math.round(Number(d.synergy)); if(!(syn>=1&&syn<=10)) syn = 5;
+    players[p] = { items, synergy:syn, comment: String(d.comment||"No comment. The judge is speechless.").slice(0,180) };
+  });
+  return finalize(players, "ai");
+}
+const GOOD_WHY=["Crowd favorite. Almost everyone says yes.","Top of most rankings for a reason.","Exactly what this category wants.","Broad consensus pick. Solid value.","Popular and actually useful here."];
+const BAD_WHY=["Nobody is asking for this.","Actively makes the lineup worse.","Polls agree: hard pass.","Wrong item for this category.","This is a drawback, not a perk."];
+function backupScore(item){ const good=S.round.good.includes(item), h=hash(S.round.cat+"|"+item); return good ? 6+(h%4) : 1+(h%3); }
+function backupJudge(){
+  const r=S.round, fixed=store.get(K.scores, {}) || {};
+  const players=[0,1].map(p=>{
+    const items=r.rosters[p].map(x=>{ const good=r.good.includes(x.item), h=hash(r.cat+"|"+x.item);
+      const score = fixed[scoreKey(x.item)]!=null ? fixed[scoreKey(x.item)] : backupScore(x.item);
+      return { item:x.item, price:x.price, score, reason:(good?GOOD_WHY:BAD_WHY)[h%5] }; });
+    const goodCount=items.filter(x=>r.good.includes(x.item)).length;
+    const syn = 2+goodCount*Math.round(8/Math.max(1,items.length)) ;
+    const comment = goodCount===items.length ? "Flawless drafting. Not a single dud." : goodCount===0 ? "Bold strategy: buy only the worst things on stage." : goodCount>=items.length/2 ? "Mostly great picks with a couple of regrets." : "More regrets than picks. Rough night at the auction.";
+    return { items, synergy:Math.min(10,syn), comment };
+  });
+  return finalize(players, "backup");
+}
+function finalize(players, source){
+  players.forEach(pl=>{ pl.total=pl.items.reduce((a,x)=>a+x.score,0); pl.sorted=pl.items.map(x=>x.score).sort((a,b)=>b-a); pl.top=pl.sorted[0]||0; });
+  const [a,b]=players; let winner=-1, how="tie";
+  if(a.total!==b.total){ winner=a.total>b.total?0:1; how="total"; }
+  else if(a.top!==b.top){ winner=a.top>b.top?0:1; how="top"; }
+  else if(a.synergy!==b.synergy){ winner=a.synergy>b.synergy?0:1; how="synergy"; }
+  else { for(let k=1;k<Math.max(a.sorted.length,b.sorted.length);k++){ const x=a.sorted[k]||0, y=b.sorted[k]||0; if(x!==y){ winner=x>y?0:1; how="depth"; break; } } }
+  // remember item scores so the same item keeps the same score in future rounds
+  const fixed=store.get(K.scores, {}) || {};
+  players.forEach(pl=>pl.items.forEach(x=>{ const k=scoreKey(x.item); if(fixed[k]==null) fixed[k]=x.score; }));
+  store.set(K.scores, fixed);
+  return { players, winner, how, source, revealed:false, applied:false };
+}
+async function runJudge(){
+  S.screen="judge"; render(); startDrumroll();
+  let li=0; const lineTimer=setInterval(()=>{
+    const st=$("#jstatus"), ch=$("#jchecks"); if(!st) return;
+    if(ch) ch.insertAdjacentHTML("beforeend", `<div class="done">✓ ${esc(JUDGE_LINES[li])}</div>`);
+    li=Math.min(li+1, JUDGE_LINES.length-1); st.textContent=JUDGE_LINES[li];
+    if(ch && ch.children.length>4) ch.firstElementChild.remove();
+  }, 900);
+  const minWait = sleep(reduced?800:4500);
+  let v;
+  try{ v = await aiJudge(); }catch(e){ v = backupJudge(); v.err = e && e.code; }
+  await minWait; clearInterval(lineTimer);
+  if(S.screen!=="judge"){ stopDrumroll(false); return; }
+  stopDrumroll(true);
+  S.verdict=v; S.screen="results"; render(); playReveal();
+}
+let revealToken=0;
+async function playReveal(){
+  const v=S.verdict, tok=++revealToken; if(v.revealed) return;
+  if(reduced){ finishReveal(); return; }
+  const n=Math.max(v.players[0].items.length, v.players[1].items.length); const tot=[0,0];
+  await sleep(500);
+  for(let k=0;k<n;k++) for(const p of [0,1]){
+    if(tok!==revealToken || S.screen!=="results") return;
+    const x=v.players[p].items[k]; if(!x) continue;
+    const row=$(`#sc${p}_${k}`), pt=$(`#pt${p}_${k}`); row.classList.add("in"); row.scrollIntoView({block:"nearest",behavior:"smooth"});
+    for(let s=1;s<=x.score;s++){ if(tok!==revealToken) return; pt.textContent=s; SFX.tick(); await sleep(55); }
+    pt.classList.add(ptsClass(x.score)); tot[p]+=x.score; $(`#tot${p}`).textContent=tot[p];
+    await sleep(520);
+  }
+  if(tok!==revealToken) return;
+  startDrumroll(); await sleep(1300); stopDrumroll(false);
+  if(tok!==revealToken) return;
+  finishReveal();
+}
+function finishReveal(){
+  const v=S.verdict; revealToken++;
+  v.revealed=true;
+  if(!v.applied){ v.applied=true; if(v.winner>=0) S.score[v.winner]++; }
+  render();
+  if(v.winner>=0){ SFX.fanfare(); confetti(); } else SFX.crash();
+  const b=$("#banner"); if(b) b.scrollIntoView({block:"center",behavior:reduced?"auto":"smooth"});
+}
+
+/* ============================ actions ============================ */
+function readSetup(){ const a=$("#n0"), b=$("#n1"); if(a&&b){ S.players=[a.value.trim(), b.value.trim()]; } }
+function priceVal(){ const el=$("#price"); return el ? el.value.trim() : ""; }
+function setPrice(v){ const el=$("#price"); if(el) el.value=Math.max(0,v); }
+function showErr(msg){ ui.err=msg; const e=$("#err"); if(e) e.textContent=msg; SFX.error(); }
+
+const ACT = {
+  mode(b){ S.mode=b.dataset.mode; S.screen="setup"; ui.err=""; SFX.tap(); render(); },
+  home(){ readSetup(); S.screen="home"; render(); },
+  money(b){ readSetup(); S.settings.money=Math.min(200,Math.max(5,S.settings.money+Number(b.dataset.d))); SFX.tap(); render(); },
+  items(b){ readSetup(); S.settings.items=Number(b.dataset.v); SFX.tap(); render(); },
+  bestof(b){ readSetup(); S.settings.bestOf=Number(b.dataset.v); SFX.tap(); render(); },
+  start(){
+    readSetup(); const [a,b]=S.players;
+    if(!a||!b){ showErr("Enter a name for both players."); return; }
+    if(a.toLowerCase()===b.toLowerCase()){ showErr("Give the players different names so the scoreboard isn't confusing."); return; }
+    store.set(K.names, S.players); A(); SFX.reveal();
+    S.score=[0,0]; S.roundNo=1; newRound(); render();
+  },
+  toCoin(){ SFX.tap(); S.screen="coin"; render(); },
+  toItems(){ S.screen="item"; ui.toast=""; SFX.reveal(); render(); },
+  pick(b){ ui.sel=Number(b.dataset.p); ui.err=""; document.querySelectorAll(".paddle").forEach(x=>x.classList.toggle("sel", Number(x.dataset.p)===ui.sel)); const e=$("#err"); if(e) e.textContent=""; SFX.tap(); },
+  step(b){ const v=parseInt(priceVal(),10)||0; setPrice(v+Number(b.dataset.d)); SFX.tap(); },
+  setp(b){ setPrice(Number(b.dataset.v)); SFX.tap(); },
+  allin(){ if(ui.sel==null){ showErr("Tap the winning player first."); return; } setPrice(S.round.money[ui.sel]); SFX.tap(); },
+  sold(){
+    const r=S.round, w=ui.sel, raw=priceVal();
+    if(w==null){ showErr("Tap the player who won this item."); return; }
+    if(!/^\d+$/.test(raw)){ showErr("Enter the price in whole dollars, like 4. $0 is fine."); return; }
+    const price=parseInt(raw,10);
+    if(r.rosters[w].length>=rosterSize()){ showErr(`${S.players[w]}'s roster is already full.`); return; }
+    if(price>r.money[w]){ showErr(`${S.players[w]} only has $${r.money[w]} left. Lower the price.`); return; }
+    const name=S.players[w], item=r.items[r.idx];
+    recordPick(w, price); SFX.chaching(); showStamp(name, price); render();
+  },
+  nobid(){ const r=S.round, t=turnOf(r.idx); recordPick(t,0); SFX.chaching(); showStamp(S.players[t],0); render(); },
+  undo(){ ui.menu=false; ui.confirm=null; undo(); render(); },
+  judge(){ ui.toast=""; runJudge(); },
+  showall(){ finishReveal(); },
+  rejudge(){ const v=S.verdict; if(v && v.applied && v.winner>=0) S.score[v.winner]--; runJudge(); },
+  next(){ S.roundNo++; newRound(); SFX.reveal(); render(); },
+  champion(){ S.screen="champion"; render(); },
+  newgame(){ S.screen="home"; S.score=[0,0]; S.roundNo=1; S.round=null; S.verdict=null; render(); },
+  menu(){ ui.menu=true; ui.confirm=null; SFX.tap(); render(); },
+  closemenu(b,e){ if(e.target.closest("[data-stop]") && !b.classList.contains("btn")) return; ui.menu=false; ui.confirm=null; render(); },
+  mute(){ muted=!muted; store.set(K.mute, muted); if(!muted) SFX.tap(); render(); },
+  skip(){ if(ui.confirm!=="skip" && S.round.hist.length){ ui.confirm="skip"; render(); return; }
+    ui.menu=false; ui.confirm=null; newRound(); ui.toast="Category skipped."; SFX.reveal(); render(); },
+  quit(){ if(ui.confirm!=="quit" && S.screen!=="home" && S.screen!=="setup"){ ui.confirm="quit"; render(); return; }
+    ui.menu=false; ui.confirm=null; revealToken++; stopDrumroll(); ACT.newgame(); }
+};
+document.addEventListener("click", e=>{
+  const b=e.target.closest("[data-act]"); if(!b) return;
+  if(b.dataset.act==="closemenu" && b.classList.contains("sheet-bg") && e.target!==b) return;
+  if(S.screen==="judge" && !["menu","closemenu","mute"].includes(b.dataset.act)) return;
+  const f=ACT[b.dataset.act]; if(f) f(b,e);
+});
+document.addEventListener("keydown", e=>{ if(e.key==="Enter" && e.target.id==="price"){ e.preventDefault(); ACT.sold(); } });
+
+/* ============================ boot ============================ */
+function boot(data){
+  let saved = (data && data.screen) ? data : store.get(K.game, null);
+  if(saved && saved.screen && saved.settings && Array.isArray(saved.players)){
+    S = Object.assign(DEFAULT(), saved);
+    if(S.screen==="judge") S.screen="roundEnd";
+    if(["category","coin","item","roundEnd","judge","results"].includes(S.screen) && !S.round) S.screen="home";
+    if(S.screen==="results" && !S.verdict) S.screen="roundEnd";
+    if(S.screen==="coin") lastScreen="coin"; // don't replay the flip after a refresh
+  }
+  render();
+  if(S.screen==="results" && S.verdict && !S.verdict.revealed) finishReveal();
+}
+boot(null);
+</script>
+
+</body>
+</html>
